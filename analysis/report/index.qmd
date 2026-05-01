@@ -1,0 +1,911 @@
+---
+title: "Testing Data Analysis Workflows in R"
+subtitle: >
+  A practical guide to testthat, assertr, and
+  reproducibility testing for research pipelines
+author: "Ronald 'Ryy' G. Thomas"
+date: "2025-07-25"
+categories: [r, testing, reproducibility]
+description: >
+  I did not really know how to systematically test
+  a data analysis pipeline until I applied software
+  engineering practices from testthat and assertr
+  to my own research workflow.
+image: "media/images/hero.jpg"
+document-type: "blog"
+draft: false
+execute:
+  echo: true
+  eval: false
+  warning: false
+  message: false
+format:
+  html:
+    code-fold: false
+    code-tools: false
+---
+
+![A research workstation with test results
+displayed alongside data analysis
+output](media/images/hero.jpg){.img-fluid
+width=80%}
+
+*Testing data analysis workflows transforms
+fragile scripts into reliable research
+infrastructure.*
+
+# Introduction
+
+I did not really know how to systematically test a
+data analysis pipeline until I applied software
+engineering practices from testthat and assertr to
+my own research workflow. Data analysis testing
+presents challenges that differ fundamentally from
+traditional software testing: you must validate data
+quality, ensure computational reproducibility, and
+verify that analytical results are both correct and
+meaningful.
+
+For years I relied on informal validation --
+checking that results "looked reasonable" and
+trusting that my code was correct because it ran
+without errors. These approaches failed to scale.
+When a collaborator's data arrived with unexpected
+column types, my pipeline broke silently. When a
+package update changed default behaviour, my results
+shifted without warning.
+
+This post presents the testing taxonomy I developed
+for data analysis workflows: unit tests for
+individual functions, data validation tests for
+quality assurance, integration tests for full
+pipelines, and reproducibility tests for
+deterministic results. All examples use the Palmer
+Penguins dataset and are immediately applicable to
+your own research code.
+
+More formally, this post documents the testing discipline at
+the Project Compendium tier of the Workflow Construct
+described in [post 52](/posts/52-workflow-construct/). Post 52
+positions the compendium tier (zzcollab and its
+predecessors) as the project-level reproducibility unit; tests
+are the discipline that closes that unit's loop, in the sense
+that an analysis is only as reproducible as its tests
+exercise. This post is the testing companion to
+[post 29](/posts/29-setupquarto/) (the compendium-tier
+keystone).
+
+## Motivations
+
+- My research pipeline broke after a data pull
+  introduced unexpected missing values in a column
+  I assumed was complete.
+- A collaborator could not reproduce my results
+  because a package update changed the default
+  random seed handling.
+- I was writing the same validation checks
+  repeatedly across projects and wanted a
+  systematic, reusable approach.
+- The gap between software engineering testing
+  practices and data science workflows seemed
+  unnecessarily wide.
+- As Wilson et al. (2017) note, "An important aspect
+  of this is to validate the code using software
+  development practices that prevent errors and
+  software testing methods that can help detect them
+  when they occur."
+
+## Objectives
+
+1. Distinguish between computational
+   reproducibility (the pipeline works) and result
+   correctness (the results are accurate) as
+   separate testing goals.
+2. Implement unit tests, data validation tests,
+   integration tests, and reproducibility tests
+   using testthat and assertr.
+3. Organise test files following R package
+   conventions and demonstrate how to run them
+   from the terminal.
+4. Set up continuous integration with GitHub
+   Actions to automate testing on every push.
+
+I am documenting my learning process here. If you
+spot errors or have better approaches, please let
+me know.
+
+![](media/images/testthat-logo.png){.img-fluid width=30% fig-align="center"}
+
+*Systematic testing adapts software engineering
+rigour to the specific needs of data analysis.*
+
+# Prerequisites and Setup
+
+Install the required packages:
+
+```{r}
+#| eval: false
+install.packages(
+  c("testthat", "assertr",
+    "palmerpenguins", "dplyr",
+    "ggplot2", "validate")
+)
+```
+
+Load libraries:
+
+```{r}
+#| eval: false
+library(testthat)
+library(assertr)
+library(palmerpenguins)
+library(dplyr)
+library(ggplot2)
+```
+
+Load the sample data:
+
+```{r}
+#| eval: false
+data(penguins)
+glimpse(penguins)
+```
+
+**Background assumed:** Familiarity with R and the
+tidyverse. No prior experience with testing
+frameworks is required.
+
+# What is Testing for Data Analysis?
+
+Testing for data analysis is the practice of writing
+automated checks that verify your analysis pipeline
+produces correct, reproducible results. Unlike
+traditional software testing, which focuses on
+function inputs and outputs, data analysis testing
+must also address data quality, statistical
+properties, and computational determinism.
+
+Think of it as quality control for research code.
+Just as a manufacturing process has inspection
+points that verify each component meets
+specifications, a data analysis pipeline has tests
+that verify each stage -- data loading, cleaning,
+modelling, and reporting -- produces expected
+results.
+
+Testing serves two primary goals. Computational
+reproducibility means another researcher can use
+your code and data to obtain identical results.
+Result correctness means the results generated by
+the code are accurate and meaningful. Both goals
+require different types of tests, and both are
+necessary for trustworthy research.
+
+# Getting Started
+
+## The Testing Taxonomy
+
+| Test Type | What It Checks | When to Use |
+|-----------|---------------|-------------|
+| Unit | Individual functions | Helper functions |
+| Data validation | Data quality | After loading |
+| Integration | Full pipeline | Before finalising |
+| Reproducibility | Same results | Random processes |
+
+## Unit Tests
+
+Unit tests verify that individual functions behave
+correctly with known inputs and expected outputs:
+
+```{r}
+#| eval: false
+test_that("outlier detection works", {
+  test_data <- c(1, 2, 3, 100, 4, 5)
+  outliers <- detect_outliers(
+    test_data, method = "iqr"
+  )
+
+  expect_equal(outliers, 100)
+  expect_length(outliers, 1)
+})
+```
+
+## Data Validation Tests
+
+Data validation tests ensure data meets quality
+requirements before analysis proceeds:
+
+```{r}
+#| eval: false
+test_that("data meets quality standards", {
+  data <- read.csv(
+    "analysis/data/raw_data/penguins.csv"
+  )
+
+  expect_equal(ncol(data), 8)
+  expect_true(
+    all(
+      c("species", "body_mass_g") %in%
+        names(data)
+    )
+  )
+  expect_true(
+    all(data$body_mass_g > 0, na.rm = TRUE)
+  )
+  expect_true(
+    all(data$body_mass_g < 10000, na.rm = TRUE)
+  )
+})
+```
+
+## Integration Tests
+
+Integration tests verify that pipeline components
+work together:
+
+```{r}
+#| eval: false
+test_that("pipeline runs successfully", {
+  expect_no_error({
+    raw_data <- load_raw_data()
+    clean_data <- clean_data(raw_data)
+    model <- fit_model(clean_data)
+    results <- generate_results(model)
+  })
+
+  expect_s3_class(results, "data.frame")
+  expect_true(nrow(results) > 0)
+})
+```
+
+## Reproducibility Tests
+
+Reproducibility tests confirm that results are
+deterministic when using the same random seed:
+
+```{r}
+#| eval: false
+test_that("bootstrap is reproducible", {
+  set.seed(42)
+  results1 <- bootstrap_analysis(
+    data, n_boots = 1000
+  )
+
+  set.seed(42)
+  results2 <- bootstrap_analysis(
+    data, n_boots = 1000
+  )
+
+  expect_equal(
+    results1$estimate, results2$estimate
+  )
+  expect_equal(
+    results1$ci_lower, results2$ci_lower
+  )
+})
+```
+
+![A diagram showing the testing pyramid with unit
+tests at the base, integration tests in the
+middle, and reproducibility tests at the
+top](media/images/ambiance2.jpg){.img-fluid}
+
+*The testing pyramid for data analysis: unit tests
+form the broad base, integration tests provide
+pipeline coverage, and reproducibility tests
+ensure determinism.*
+
+# The testthat Framework
+
+## Basics
+
+The testthat package provides the foundation for
+testing in R. Tests follow the Arrange-Act-Assert
+pattern:
+
+```{r}
+#| eval: false
+library(testthat)
+
+test_that("description of test", {
+  x <- c(1, 2, 3, 4, 5)
+  result <- mean(x)
+  expect_equal(result, 3)
+})
+```
+
+## Common Expectations
+
+```{r}
+#| eval: false
+expect_equal(result, expected)
+expect_identical(result, expected)
+expect_true(condition)
+expect_false(condition)
+expect_type(x, "double")
+expect_s3_class(model, "lm")
+expect_error(bad_function())
+expect_warning(risky_function())
+expect_no_error(safe_function())
+```
+
+## Test File Organisation
+
+```
+tests/
+  testthat.R
+  testthat/
+    helper-test-data.R
+    test-data-loading.R
+    test-data-cleaning.R
+    test-models.R
+    test-visualization.R
+```
+
+Test files must start with `test-` to be discovered
+by the test runner.
+
+## Helper Functions
+
+Create reusable test utilities in `helper-*.R`
+files:
+
+```{r}
+#| eval: false
+create_test_penguins <- function(n = 50) {
+  data.frame(
+    species = sample(
+      c("Adelie", "Chinstrap", "Gentoo"),
+      n, replace = TRUE
+    ),
+    bill_length_mm = rnorm(
+      n, mean = 44, sd = 5
+    ),
+    body_mass_g = rnorm(
+      n, mean = 4200, sd = 800
+    )
+  )
+}
+
+expect_valid_model <- function(model) {
+  expect_s3_class(model, "lm")
+  expect_true(length(coef(model)) > 0)
+  expect_true(!any(is.na(coef(model))))
+}
+```
+
+## Running Tests
+
+```{r}
+#| eval: false
+devtools::test()
+
+testthat::test_file(
+  "tests/testthat/test-data-cleaning.R"
+)
+
+testthat::test_dir(
+  "tests/testthat", filter = "model"
+)
+```
+
+# Data Validation with assertr
+
+## Pipeline-Friendly Assertions
+
+The assertr package integrates data validation into
+tidyverse pipelines:
+
+```{r}
+#| eval: false
+library(assertr)
+
+penguins |>
+  verify(nrow(.) > 300) |>
+  verify(ncol(.) == 8) |>
+  assert(
+    within_bounds(0, 10000), body_mass_g
+  ) |>
+  assert(
+    in_set("Adelie", "Chinstrap", "Gentoo"),
+    species
+  ) |>
+  insist(within_n_sds(3), bill_length_mm)
+```
+
+## assertr Functions
+
+- `verify()`: Check that a logical condition is
+  TRUE.
+- `assert()`: Check that a predicate holds for a
+  column.
+- `insist()`: Check that a predicate holds using
+  row-wise computation.
+
+## Domain-Specific Validation
+
+Create validation functions tailored to your data:
+
+```{r}
+#| eval: false
+validate_penguin_data <- function(data) {
+  test_that("penguin data validation", {
+    required_cols <- c(
+      "species", "island",
+      "bill_length_mm", "bill_depth_mm",
+      "flipper_length_mm", "body_mass_g",
+      "sex", "year"
+    )
+    expect_true(
+      all(required_cols %in% names(data))
+    )
+
+    valid_species <- c(
+      "Adelie", "Chinstrap", "Gentoo"
+    )
+    expect_true(
+      all(data$species %in% valid_species)
+    )
+
+    expect_true(
+      all(data$bill_length_mm > 0,
+          na.rm = TRUE)
+    )
+    expect_true(
+      all(data$year >= 2007 &
+          data$year <= 2009)
+    )
+  })
+}
+```
+
+# Reproducibility Testing
+
+## Seed Management
+
+Always document and test seed usage:
+
+```{r}
+#| eval: false
+test_that("cross-validation is reproducible", {
+  data <- create_test_penguins(100)
+
+  set.seed(123)
+  cv1 <- perform_cv(data, folds = 5)
+
+  set.seed(123)
+  cv2 <- perform_cv(data, folds = 5)
+
+  expect_equal(
+    cv1$fold_assignments,
+    cv2$fold_assignments
+  )
+  expect_equal(cv1$rmse, cv2$rmse)
+})
+```
+
+## Testing Against Known Results
+
+Store expected values from verified runs:
+
+```{r}
+#| eval: false
+test_that("regression coefficients match", {
+  data(penguins, package = "palmerpenguins")
+  clean_data <- na.omit(penguins)
+
+  model <- lm(
+    body_mass_g ~ flipper_length_mm,
+    data = clean_data
+  )
+  coefs <- coef(model)
+
+  expect_equal(
+    coefs["(Intercept)"],
+    -5780.83, tolerance = 0.1
+  )
+  expect_equal(
+    coefs["flipper_length_mm"],
+    49.69, tolerance = 0.01
+  )
+})
+```
+
+## Package Version Testing
+
+Track package versions to identify when results
+might change:
+
+```{r}
+#| eval: false
+test_that("expected package versions", {
+  expect_true(
+    packageVersion("dplyr") >= "1.0.0"
+  )
+  expect_true(
+    packageVersion("ggplot2") >= "3.4.0"
+  )
+
+  if (requireNamespace("renv", quietly = TRUE)) {
+    status <- renv::status()
+    expect_true(status$synchronized)
+  }
+})
+```
+
+# Testing Analysis Scripts
+
+## Script Execution Tests
+
+Verify that analysis scripts run without error:
+
+```{r}
+#| eval: false
+test_that("analysis scripts run", {
+  scripts <- c(
+    "scripts/01_load_data.R",
+    "scripts/02_clean_data.R",
+    "scripts/03_fit_models.R",
+    "scripts/04_create_figures.R"
+  )
+
+  for (script in scripts) {
+    expect_true(file.exists(script))
+    expect_no_error(
+      source(script, local = new.env()),
+      info = paste("Failed:", script)
+    )
+  }
+})
+```
+
+## Output Validation
+
+Test that scripts produce expected output files:
+
+```{r}
+#| eval: false
+test_that("scripts produce outputs", {
+  source(
+    "scripts/02_clean_data.R",
+    local = new.env()
+  )
+
+  expect_true(file.exists(
+    "analysis/data/derived_data/clean.rds"
+  ))
+
+  clean_data <- readRDS(
+    "analysis/data/derived_data/clean.rds"
+  )
+  expect_true(nrow(clean_data) > 300)
+  expect_false(any(is.na(clean_data)))
+})
+```
+
+# Continuous Integration
+
+## GitHub Actions for R
+
+Create `.github/workflows/test-analysis.yml`:
+
+```yaml
+name: Test Analysis
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: r-lib/actions/setup-r@v2
+    - uses: r-lib/actions/setup-r-dependencies@v2
+
+    - name: Run tests
+      run: |
+        testthat::test_dir('tests/testthat')
+      shell: Rscript {0}
+
+    - name: Data validation
+      run: |
+        source('tests/validate_data.R')
+      shell: Rscript {0}
+```
+
+Tests run automatically on every push, catching
+problems before they reach collaborators.
+
+# Complete Example
+
+## Penguins Regression Testing
+
+A complete test file for a regression analysis:
+
+```{r}
+#| eval: false
+test_that("body mass model properties", {
+  data(penguins, package = "palmerpenguins")
+  clean_data <- na.omit(penguins)
+
+  model <- lm(
+    body_mass_g ~ flipper_length_mm + species,
+    data = clean_data
+  )
+
+  expect_s3_class(model, "lm")
+  expect_equal(length(coef(model)), 4)
+
+  r_squared <- summary(model)$r.squared
+  expect_true(r_squared > 0.8)
+
+  expect_true(
+    abs(mean(resid(model))) < 1e-10
+  )
+})
+
+test_that("model is reproducible", {
+  data(penguins, package = "palmerpenguins")
+  clean_data <- na.omit(penguins)
+
+  model1 <- lm(
+    body_mass_g ~ flipper_length_mm + species,
+    data = clean_data
+  )
+  model2 <- lm(
+    body_mass_g ~ flipper_length_mm + species,
+    data = clean_data
+  )
+
+  expect_equal(coef(model1), coef(model2))
+  expect_equal(
+    summary(model1)$r.squared,
+    summary(model2)$r.squared
+  )
+})
+```
+
+## Things to Watch Out For
+
+1. **Floating-point comparison requires
+   tolerance.** Never use `expect_identical()` for
+   numeric results. Use `expect_equal()` with an
+   appropriate `tolerance` argument.
+2. **Tests that depend on external data are
+   fragile.** If your tests read from a database or
+   API, they will fail when the source is
+   unavailable. Use local test fixtures instead.
+3. **Random seed scope is global.** Setting
+   `set.seed()` in one test affects subsequent
+   tests in the same session. Reset seeds
+   explicitly in each test that uses randomness.
+4. **Package updates change defaults silently.**
+   A dplyr update that changes `summarise()`
+   behaviour will not cause a test failure unless
+   you test the specific output values, not just
+   the output structure.
+5. **Over-testing implementation details creates
+   brittleness.** Test what the function should
+   produce, not how it produces it. If you test
+   internal variable names, refactoring breaks your
+   tests without changing functionality.
+
+![A testing dashboard showing green checkmarks for
+passing tests and a pipeline
+diagram](media/images/ambiance3.jpg){.img-fluid}
+
+*Automated testing provides continuous assurance
+that your analysis pipeline produces correct
+results.*
+
+## Lessons Learnt
+
+### Conceptual Understanding
+
+- Testing data analysis requires addressing both
+  computational reproducibility (the pipeline works)
+  and result correctness (the results are accurate);
+  these are distinct goals requiring different test
+  types.
+- Data validation tests are the most immediately
+  valuable addition to an analysis workflow because
+  data problems are the most common source of silent
+  failures.
+- Integration tests that run the full pipeline
+  end-to-end catch interaction effects that unit
+  tests miss.
+- Reproducibility tests with fixed seeds provide a
+  baseline against which future changes can be
+  measured.
+
+### Technical Skills
+
+- The testthat Arrange-Act-Assert pattern structures
+  tests clearly and makes failures easy to diagnose.
+- assertr's pipeline integration (`verify`,
+  `assert`, `insist`) fits naturally into tidyverse
+  workflows without requiring separate test files.
+- Helper functions in `helper-*.R` files reduce
+  test code duplication and centralise test data
+  generation.
+- GitHub Actions with `r-lib/actions/setup-r@v2`
+  provides automated testing with minimal
+  configuration.
+
+### Gotchas and Pitfalls
+
+- `expect_equal()` with default tolerance may be
+  too loose for some statistical comparisons;
+  specify tolerance explicitly.
+- Tests that modify global state (working
+  directory, options, environment variables) can
+  cause cascading failures in other tests.
+- The assertr `insist()` function uses row-wise
+  computation, which is slower than `assert()` for
+  large datasets.
+- Test discovery requires files to start with
+  `test-`; a misnamed file will be silently
+  ignored.
+
+## Limitations
+
+- This post focuses on R-specific tools (testthat,
+  assertr) and does not address testing in Python,
+  Julia, or other data science languages.
+- The examples use the Palmer Penguins dataset,
+  which is small and well-behaved. Testing
+  strategies for large, messy, real-world datasets
+  require additional considerations.
+- Continuous integration with GitHub Actions
+  requires a public or paid private repository;
+  self-hosted runners are an alternative.
+- Data validation tests assume known data structure;
+  they do not detect novel failure modes in
+  previously unseen data.
+- The testing taxonomy presented here is not
+  exhaustive; performance testing, security testing,
+  and accessibility testing are outside scope.
+- assertr is not actively maintained at the same
+  pace as testthat; consider the validate package
+  as a more actively developed alternative.
+
+## Opportunities for Improvement
+
+1. Implement property-based testing using the
+   `quickcheck` or `hedgehog` R packages to
+   generate random test inputs automatically.
+2. Add snapshot testing with `testthat::expect_
+   snapshot()` to detect unexpected changes in
+   complex output (tables, plots, reports).
+3. Create a test template that can be copied into
+   new analysis projects with pre-built data
+   validation and reproducibility tests.
+4. Integrate code coverage reporting using the
+   `covr` package to identify untested code paths.
+5. Develop a testing checklist specific to clinical
+   research workflows, addressing regulatory
+   requirements for validated analysis code.
+6. Explore the `pointblank` package as a more
+   modern alternative to assertr for data
+   validation.
+
+# Wrapping Up
+
+Testing data analysis workflows requires adapting
+traditional software testing practices to the
+specific challenges of data science. The combination
+of unit tests, data validation, integration tests,
+and reproducibility tests provides comprehensive
+coverage for research code.
+
+What I learnt most from developing this testing
+approach is that the investment pays off
+immediately. The first time a data validation test
+catches an unexpected column type before it
+propagates through the pipeline, the time spent
+writing tests is repaid. The first time a
+reproducibility test confirms that a collaborator's
+results match yours, the value of systematic testing
+becomes undeniable.
+
+I encourage you to start with data validation tests
+-- they require the least effort and catch the most
+common failures. Add unit tests for your helper
+functions next, then integration tests for the full
+pipeline. Reproducibility tests can follow once the
+foundation is solid.
+
+Main takeaways:
+
+- Testing ensures both computational
+  reproducibility and result correctness.
+- testthat provides the structural foundation;
+  assertr adds pipeline-friendly validation.
+- Data validation tests are the highest-value
+  addition to any analysis workflow.
+- Continuous integration automates testing on
+  every code change.
+
+# See Also
+
+**Related posts:**
+
+- [Blog Post Template](
+  ../39-templatepost/) --
+  The ZZCOLLAB template includes a full test suite
+
+**Key resources:**
+
+- [testthat Package](
+  https://testthat.r-lib.org/) --
+  Official documentation
+- [assertr Package](
+  https://docs.ropensci.org/assertr/) --
+  Pipeline-friendly data validation
+- [R Packages (Wickham)](
+  https://r-pkgs.org/testing-basics.html) --
+  Testing chapter from the R Packages book
+- [Good Enough Practices (Wilson et al., 2017)](
+  https://doi.org/10.1371/journal.pcbi.1005510) --
+  Testing in computational research
+
+# Reproducibility
+
+All code in this post uses `eval: false` to prevent
+execution during rendering. To run the examples:
+
+```bash
+Rscript -e "
+  library(testthat)
+  library(assertr)
+  library(palmerpenguins)
+  testthat::test_local()
+"
+```
+
+**Project files:**
+
+```
+testingfordataanalysisworkflow/
+  analysis/report/index.qmd  -- This post
+  tests/testthat/             -- Test files
+  analysis/media/images/      -- Hero, ambiance
+```
+
+**References:**
+
+- Wilson, G., Bryan, J., Cranston, K., Kitzes, J.,
+  Nederbragt, L., & Teal, T.K. (2017). Good enough
+  practices in scientific computing. *PLOS
+  Computational Biology*, 13(6), e1005510.
+- Wickham, H. (2011). testthat: Get started with
+  testing. *The R Journal*, 3(1), 5-10.
+
+```{r}
+#| echo: false
+#| eval: false
+sessionInfo()
+```
+
+# Let's Connect
+
+- **GitHub:**
+  [rgt47](https://github.com/rgt47)
+- **Twitter/X:**
+  [@rgt47](https://twitter.com/rgt47)
+- **LinkedIn:**
+  [Ronald Glenn Thomas](
+  https://linkedin.com/in/rgthomaslab)
+- **Email:**
+  [rgtlab.org/contact](https://rgtlab.org/contact)
+
+I would enjoy hearing from you if:
+
+- You spot an error or a better approach to any of
+  the code in this post.
+- You have suggestions for topics you would like to
+  see covered.
+- You want to discuss R programming, data science,
+  or reproducible research.
+- You have questions about anything in this
+  tutorial.
+- You just want to say hello and connect.
