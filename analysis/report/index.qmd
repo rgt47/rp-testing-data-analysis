@@ -20,6 +20,8 @@ format:
   html:
     code-fold: false
     code-tools: false
+cluster: r-packages
+cluster-order: 4
 ---
 
 ![A research workstation with test results
@@ -252,6 +254,17 @@ test_that("pipeline runs successfully", {
   expect_true(nrow(results) > 0)
 })
 ```
+
+## Related posts in this cluster
+
+This post is part of the *R Package Development and Testing* series.
+Recommended reading order:
+
+1. Post 70: [Updating an R Package: A Complete Workflow](../70-rcodepackageupdating/)
+2. Post 71: [Writing a Simple R Package Using S3 Methods](../71-simpleS3/)
+3. Post 72: [Writing a Simple Vim Plugin for REPL Interaction](../72-simplevimplugin/)
+4. **Post 73: Testing Data Analysis Workflows in R** (this post)
+5. Post 74: [From testthat to tinytest](../74-testthat-to-tinytest/)
 
 ## Reproducibility Tests
 
