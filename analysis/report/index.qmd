@@ -8,7 +8,7 @@ description: >
   a data analysis pipeline until I applied software
   engineering practices from testthat and assertr
   to my own research workflow.
-image: "media/images/hero.jpg"
+image: "media/images/hero.png"
 document-type: "blog"
 draft: false
 execute:
@@ -26,7 +26,7 @@ cluster-order: 3
 
 ![A research workstation with test results
 displayed alongside data analysis
-output](media/images/hero.jpg){.img-fluid
+output](media/images/hero.png){.img-fluid
 width=80% fig-align="center"}
 
 *Testing data analysis workflows transforms
