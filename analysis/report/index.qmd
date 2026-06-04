@@ -10,7 +10,7 @@ description: >
   to my own research workflow.
 image: "media/images/hero.png"
 document-type: "blog"
-draft: false
+draft: true
 execute:
   echo: true
   eval: false
@@ -295,7 +295,7 @@ test_that("bootstrap is reproducible", {
 ![A diagram showing the testing pyramid with unit
 tests at the base, integration tests in the
 middle, and reproducibility tests at the
-top](media/images/ambiance2.jpg){.img-fluid}
+top](media/images/ambiance2.png){.img-fluid}
 
 *The testing pyramid for data analysis: unit tests
 form the broad base, integration tests provide
@@ -698,7 +698,7 @@ test_that("model is reproducible", {
 
 ![A testing dashboard showing green checkmarks for
 passing tests and a pipeline
-diagram](media/images/ambiance3.jpg){.img-fluid}
+diagram](media/images/ambiance3.png){.img-fluid}
 
 *Automated testing provides continuous assurance
 that an analysis pipeline produces correct results.*
