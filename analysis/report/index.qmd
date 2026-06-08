@@ -1,6 +1,6 @@
 ---
 title: "Testing Data Analysis Workflows in R"
-author: "Ronald 'Ryy' G. Thomas"
+author: "Ronald G. Thomas"
 date: "2025-07-25"
 categories: [r, testing, reproducibility]
 description: >
