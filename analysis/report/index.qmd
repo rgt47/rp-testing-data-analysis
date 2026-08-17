@@ -16,10 +16,6 @@ execute:
   eval: false
   warning: false
   message: false
-format:
-  html:
-    code-fold: false
-    code-tools: false
 cluster: r-packages
 cluster-order: 3
 ---
