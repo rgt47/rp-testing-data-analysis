@@ -140,6 +140,15 @@ data(penguins)
 glimpse(penguins)
 ```
 
+**A note on the framework.** The examples below use `testthat`,
+which is the most widely documented R testing framework and
+therefore the easiest one to learn the concepts in. The lab's own
+packages are written against `tinytest`; see
+[From testthat to tinytest](../rp-testthat-to-tinytest/) for the
+conversion and for the assertion vocabulary. Every concept in this
+post transfers without modification, since the two frameworks
+differ in ceremony rather than in what they can express.
+
 **Background assumed:** Familiarity with R and the
 tidyverse. No prior experience with testing
 frameworks is required.
