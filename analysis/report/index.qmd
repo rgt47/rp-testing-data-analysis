@@ -3,7 +3,7 @@ title: "Testing Data Analysis Workflows in R"
 author: "Ronald G. Thomas"
 date: "2025-07-25"
 categories: [r, testing, reproducibility]
-description: "I did not really know how to systematically test a data analysis pipeline until I applied software engineering practices from testthat and assertr to my own research workflow."
+description: "Testing a data analysis pipeline systematically means applying software engineering practices from testthat and assertr to a research workflow."
 image: "media/images/hero.png"
 document-type: "blog"
 draft: false
@@ -26,10 +26,10 @@ infrastructure.*
 
 # Introduction
 
-I did not really know how to systematically test a
-data analysis pipeline until I applied software
-engineering practices from testthat and assertr to
-my own research workflow. Data analysis testing
+Testing a data analysis pipeline systematically
+means applying software engineering practices from
+testthat and assertr to a research workflow, which
+is what this post does. Data analysis testing
 presents challenges that differ fundamentally from
 traditional software testing: one must validate data
 quality, ensure computational reproducibility, and
